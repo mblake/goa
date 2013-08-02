@@ -31,6 +31,7 @@ type Client struct {
 	Method         string
 	Timestamp      string
 	Version        string
+	Verifier       string
 }
 
 type RequestSignature struct {
@@ -43,7 +44,7 @@ type RequestSignature struct {
 
 func NewClient(provider Provider, callbackUrl, consumerKey, consumerSecret string) *Client {
 	//Instantiate client struct containing initial data
-	return &Client{provider, callbackUrl, consumerKey, consumerSecret, "", "", "", "", ""}
+	return &Client{provider, callbackUrl, consumerKey, consumerSecret, "", "", "", "", "", ""}
 }
 
 func (c *Client) GetRequestToken() string {
@@ -62,6 +63,32 @@ func (c *Client) GetRequestToken() string {
 	bs, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 	}
+	tr := string(bs)
+	return tr
+}
+
+func (c *Client) GetAccessToken(verifier, token string) string {
+	c.Verifier = verifier
+	c.RequestToken = token
+	client := &http.Client{}
+	httpMethod := "POST"
+	req, err := http.NewRequest(httpMethod, c.AuthProvider.AccessTokenUrl, nil)
+	if err != nil {
+	}
+	header, parameters := c.GenerateRequest()
+	signedHeader := header + ",oauth_signature=\"" + url.QueryEscape(c.GenerateSignature(httpMethod, c.AuthProvider.AccessTokenUrl, parameters)) + "\""
+	req.Header.Add("Authorization", signedHeader)
+	resp, err := client.Do(req)
+	if err != nil {
+	}
+	bs, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+	}
+
+	fmt.Println("===============\n" + string(signedHeader) + "\n==================")
+
+	fmt.Println("===============\n" + string(parameters) + "\n==================")
+	fmt.Println("===============\n" + string(bs) + "\n==================")
 	tr := string(bs)
 	return tr
 }
@@ -112,10 +139,20 @@ func (c *Client) GenerateRequest() (string, string) {
 	key := c.ConsumerKey
 	callback := url.QueryEscape(c.CallbackUrl)
 	header := "OAuth "
-	header += "oauth_callback=\"" + callback + "\",oauth_consumer_key=\"" + key + "\",oauth_nonce=\"" + nonce + "\",oauth_signature_method=\"HMAC-SHA1\",oauth_timestamp=\"" + time + "\",oauth_version=\"1.0\""
-	parameters := "oauth_callback=" + url.QueryEscape(callback) + "&oauth_consumer_key=" + key + "&oauth_nonce=" + nonce + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + time + "&oauth_version=1.0"
+	header += "oauth_consumer_key=\"" + key + "\",oauth_nonce=\"" + nonce + "\",oauth_signature_method=\"HMAC-SHA1\",oauth_timestamp=\"" + time + "\",oauth_version=\"1.0\""
+
+	parameters := "oauth_consumer_key=" + key + "&oauth_nonce=" + nonce + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + time + "&oauth_version=1.0"
+	if c.Verifier == "" {
+		header += ",oauth_callback=\"" + callback + "\""
+		parameters += "&oauth_callback=" + url.QueryEscape(callback)
+	}
+	if c.Verifier != "" {
+		header += ",oauth_verifier=\"" + c.Verifier + "\"" + ",oauth_token=\"" + c.RequestToken + "\""
+		parameters += "&oauth_verifier=" + c.Verifier + "&oauth_token=" + c.RequestToken
+	}
 	return header, parameters
 }
+
 func generateNonce() string {
 	uuid := make([]byte, 16)
 	n, err := rand.Read(uuid)
