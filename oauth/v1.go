@@ -22,16 +22,17 @@ type Provider struct {
 }
 
 type Client struct {
-	AuthProvider   Provider
-	CallbackUrl    string
-	ConsumerKey    string
-	ConsumerSecret string
-	RequestToken   string
-	Signature      string
-	Method         string
-	Timestamp      string
-	Version        string
-	Verifier       string
+	AuthProvider       Provider
+	CallbackUrl        string
+	ConsumerKey        string
+	ConsumerSecret     string
+	RequestToken       string
+	RequestTokenSecret string
+	Signature          string
+	Method             string
+	Timestamp          string
+	Version            string
+	Verifier           string
 }
 
 type RequestSignature struct {
@@ -44,7 +45,7 @@ type RequestSignature struct {
 
 func NewClient(provider Provider, callbackUrl, consumerKey, consumerSecret string) *Client {
 	//Instantiate client struct containing initial data
-	return &Client{provider, callbackUrl, consumerKey, consumerSecret, "", "", "", "", "", ""}
+	return &Client{provider, callbackUrl, consumerKey, consumerSecret, "", "", "", "", "", "", ""}
 }
 
 func (c *Client) GetRequestToken() string {
@@ -124,7 +125,8 @@ func (c *Client) GenerateSignature(method, baseUrl, headerContent string) string
 	baseRequest := parsedUrl.Scheme + "://" + parsedUrl.Host + parsedUrl.Path
 	sig := method + "&" + url.QueryEscape(baseRequest) + "&" + url.QueryEscape(params)
 	fmt.Println(sig)
-	sigKey := url.QueryEscape(c.ConsumerSecret) + "&"
+	sigKey := url.QueryEscape(c.ConsumerSecret) + "&" + url.QueryEscape(c.RequestTokenSecret)
+	fmt.Print("====SIG KEY====\n" + sigKey + "\n====END SIG KEY\n")
 	hashfun := hmac.New(sha1.New, []byte(sigKey))
 	hashfun.Write([]byte(sig))
 	rawsignature := hashfun.Sum(nil)
@@ -146,11 +148,37 @@ func (c *Client) GenerateRequest() (string, string) {
 		header += ",oauth_callback=\"" + callback + "\""
 		parameters += "&oauth_callback=" + url.QueryEscape(callback)
 	}
+	if c.RequestToken != "" {
+		parameters += "&oauth_token=" + c.RequestToken
+		header += ",oauth_token=\"" + c.RequestToken + "\""
+	}
 	if c.Verifier != "" {
-		header += ",oauth_verifier=\"" + c.Verifier + "\"" + ",oauth_token=\"" + c.RequestToken + "\""
-		parameters += "&oauth_verifier=" + c.Verifier + "&oauth_token=" + c.RequestToken
+		header += ",oauth_verifier=\"" + c.Verifier + "\""
+		parameters += "&oauth_verifier=" + c.Verifier
 	}
 	return header, parameters
+}
+
+func (c *Client) MakeOauthRequest(method, uri, authToken, authSecret string) string {
+	c.RequestToken = authToken
+	c.RequestTokenSecret = authSecret
+	client := &http.Client{}
+	httpMethod := method
+	req, err := http.NewRequest(httpMethod, uri, nil)
+	if err != nil {
+	}
+	header, parameters := c.GenerateRequest()
+	signedHeader := header + ",oauth_signature=\"" + url.QueryEscape(c.GenerateSignature(httpMethod, uri, parameters)) + "\""
+	fmt.Println(signedHeader)
+	req.Header.Add("Authorization", signedHeader)
+	resp, err := client.Do(req)
+	if err != nil {
+	}
+	bs, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+	}
+	tr := string(bs)
+	return tr
 }
 
 func generateNonce() string {
