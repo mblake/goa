@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -55,7 +56,7 @@ func (c *Client) GetRequestToken() string {
 	req, err := http.NewRequest(httpMethod, c.AuthProvider.RequestTokenUrl, nil)
 	if err != nil {
 	}
-	header, parameters := c.GenerateRequest()
+	header, parameters := c.GenerateRequest("")
 	signedHeader := header + ",oauth_signature=\"" + url.QueryEscape(c.GenerateSignature(httpMethod, c.AuthProvider.RequestTokenUrl, parameters)) + "\""
 	req.Header.Add("Authorization", signedHeader)
 	resp, err := client.Do(req)
@@ -76,7 +77,7 @@ func (c *Client) GetAccessToken(verifier, token string) string {
 	req, err := http.NewRequest(httpMethod, c.AuthProvider.AccessTokenUrl, nil)
 	if err != nil {
 	}
-	header, parameters := c.GenerateRequest()
+	header, parameters := c.GenerateRequest("")
 	signedHeader := header + ",oauth_signature=\"" + url.QueryEscape(c.GenerateSignature(httpMethod, c.AuthProvider.AccessTokenUrl, parameters)) + "\""
 	req.Header.Add("Authorization", signedHeader)
 	resp, err := client.Do(req)
@@ -86,10 +87,6 @@ func (c *Client) GetAccessToken(verifier, token string) string {
 	if err != nil {
 	}
 
-	fmt.Println("===============\n" + string(signedHeader) + "\n==================")
-
-	fmt.Println("===============\n" + string(parameters) + "\n==================")
-	fmt.Println("===============\n" + string(bs) + "\n==================")
 	tr := string(bs)
 	return tr
 }
@@ -135,7 +132,7 @@ func (c *Client) GenerateSignature(method, baseUrl, headerContent string) string
 	return string(base64signature)
 }
 
-func (c *Client) GenerateRequest() (string, string) {
+func (c *Client) GenerateRequest(params string) (string, string) {
 	time := generateTimestamp()
 	nonce := url.QueryEscape(generateNonce())
 	key := c.ConsumerKey
@@ -156,28 +153,41 @@ func (c *Client) GenerateRequest() (string, string) {
 		header += ",oauth_verifier=\"" + c.Verifier + "\""
 		parameters += "&oauth_verifier=" + c.Verifier
 	}
+	if params != "" {
+		nParams := []string{params, parameters}
+		parameters = strings.Join(nParams, "&")
+	}
+	println("\n\n\n\n\n\n\n\n")
+	println(parameters)
+	println(header)
+	println("\n\n\n\n\n\n\n\n")
 	return header, parameters
 }
 
-func (c *Client) MakeOauthRequest(method, uri, authToken, authSecret string) string {
+func (c *Client) MakeOauthRequest(method, uri, authToken, authSecret, options string) string {
 	c.RequestToken = authToken
 	c.RequestTokenSecret = authSecret
 	client := &http.Client{}
 	httpMethod := method
-	req, err := http.NewRequest(httpMethod, uri, nil)
+	req, err := http.NewRequest(httpMethod, uri+"?"+options, nil)
 	if err != nil {
 	}
-	header, parameters := c.GenerateRequest()
+	header, parameters := c.GenerateRequest(options)
 	signedHeader := header + ",oauth_signature=\"" + url.QueryEscape(c.GenerateSignature(httpMethod, uri, parameters)) + "\""
 	fmt.Println(signedHeader)
 	req.Header.Add("Authorization", signedHeader)
 	resp, err := client.Do(req)
+	println("Doing request")
 	if err != nil {
+		println(err.Error())
 	}
 	bs, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		println(err.Error())
 	}
+
 	tr := string(bs)
+	println(tr)
 	return tr
 }
 
